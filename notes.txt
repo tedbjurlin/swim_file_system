@@ -1,0 +1,25 @@
+Untested functions that directly access the disk:
+* read_loop()
+* write_loop()
+* write_block_boundary()
+
+Other functions for which we need tests:
+* write()
+* read()
+
+Tested functions:
+* directory_exists()
+* load_file_bytes()
+* save_file_bytes()
+* activate_bit()
+* request_block()
+* clear_block_buffer()
+* inode_table_inode()
+* update_inode_table()
+* save_inode() 
+* load_inode()
+* mark_inode_blocks_in_use()
+* initialize_new_file()
+* directory_inode()
+* load_directory()
+* list_directory()
