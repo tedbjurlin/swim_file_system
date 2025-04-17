@@ -385,8 +385,10 @@ impl<
                 if j == bytes.len() && (j == MAX_FILENAME_BYTES || names[i][j] == 0) {
                     return Ok((i+1, self.load_inode(i+1)))
                 }
-                if names[i][j] != bytes[j] {
-                    break;
+                else if j != bytes.len() {
+                    if names[i][j] != bytes[j] {
+                        break;
+                    }
                 }
             }
         }
@@ -495,7 +497,7 @@ impl<
             let data_block = self.request_data_block()?;
             directory_inode.blocks[directory_inode.blocks_used()] = data_block;
         }
-        directory_inode.bytes_stored += entry_start as u16 + MAX_FILENAME_BYTES as u16;
+        directory_inode.bytes_stored = entry_start as u16 + MAX_FILENAME_BYTES as u16;
         self.save_file_bytes(&directory_inode);
         self.save_inode(0, &directory_inode);
         Ok(())
@@ -568,17 +570,19 @@ impl<
         // * When finished, make sure to write the current block to disk.
         if let Some(mut fileinfo) = self.open[fd] {
             if fileinfo.writing {
-                if buffer.len() <= MAX_FILE_BYTES {
+                if buffer.len() + (fileinfo.current_block * BLOCK_SIZE + fileinfo.offset) <= MAX_FILE_BYTES {
                     for i in 0..buffer.len() {
-                        if i - (fileinfo.current_block * BLOCK_SIZE) >= BLOCK_SIZE {
+                        if fileinfo.offset >= BLOCK_SIZE {
                             self.disk.write(fileinfo.inode.blocks[fileinfo.current_block] as usize, &fileinfo.block_buffer).unwrap();
                             fileinfo.current_block += 1;
+                            fileinfo.offset = 0;
                             fileinfo.inode.blocks[fileinfo.current_block] = self.request_data_block()?;
                         }
-                        fileinfo.block_buffer[i - (fileinfo.current_block * BLOCK_SIZE)] = buffer[i];
+                        fileinfo.block_buffer[fileinfo.offset] = buffer[i];
+                        fileinfo.offset += 1;
                     }
                     self.disk.write(fileinfo.inode.blocks[fileinfo.current_block] as usize, &fileinfo.block_buffer).unwrap();
-                    fileinfo.inode.bytes_stored = buffer.len() as u16;
+                    fileinfo.inode.bytes_stored = (fileinfo.current_block * BLOCK_SIZE + fileinfo.offset) as u16;
                     self.open[fd] = Some(fileinfo);
                     Ok(())
                 } else {
@@ -615,7 +619,7 @@ impl<
     }
 
     pub fn open_append(&mut self, filename: &str) -> anyhow::Result<usize, FileSystemError> {
-        todo!("Open a file to append");
+        //todo!("Open a file to append");
         // Call `inode_for()` to get the file's inode.
         // Pick a file descriptor to use for the file.
         // Call FileInfo::write_inside() to create a FileInfo object for the `open` table.
@@ -624,6 +628,16 @@ impl<
         // Read the current block into the FileInfo's block buffer.
         // Updated `open` and `open_inodes`.
         // Return the file descriptor.
+        let (inode_num, inode) = self.inode_for(filename)?;
+        if let Some(fd) = self.find_lowest_fd() {
+            let mut fileinfo = FileInfo::write_inside(inode, inode_num, inode.blocks_used() - 1, inode.bytes_stored as usize % BLOCK_SIZE);
+            self.disk.read(fileinfo.current_block, &mut fileinfo.block_buffer).unwrap();
+            self.open[fd] = Some(fileinfo);
+            self.open_inodes[inode_num] = true;
+            Ok(fd)
+        } else {
+            Err(FileSystemError::TooManyOpen(MAX_OPEN))
+        }
     }
 }
 
@@ -1154,6 +1168,7 @@ mod tests {
         let f1 = sys.open_create("one.txt").unwrap();
         sys.write(f1, one[0..one.len() / 2].as_bytes()).unwrap();
         let f2 = sys.open_create("two.txt").unwrap();
+        println!("{:?}", sys.disk);
         sys.write(f2, two[0..two.len() / 2].as_bytes()).unwrap();
         sys.write(f1, one[one.len() / 2..one.len()].as_bytes())
             .unwrap();
@@ -1161,6 +1176,7 @@ mod tests {
             .unwrap();
         sys.close(f1).unwrap();
         sys.close(f2).unwrap();
+        println!("{:?}", sys.disk);
         assert_eq!(one, read_to_string(&mut sys, "one.txt").as_str());
         assert_eq!(two, read_to_string(&mut sys, "two.txt").as_str());
 
