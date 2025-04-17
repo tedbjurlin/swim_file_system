@@ -2,50 +2,40 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    rust-overlay.url = "github:oxalica/rust-overlay";
+    naersk.url = "github:nix-community/naersk";
   };
 
   outputs = {
     self,
     nixpkgs,
     flake-utils,
-    rust-overlay,
+    naersk,
     ...
   }:
   flake-utils.lib.eachDefaultSystem (system:
     let
-      overlays = [ (import rust-overlay) ];
-      pkgs = import nixpkgs {inherit system overlays;};
+      pkgs = import nixpkgs {inherit system ;};
 
-      toolchain = pkgs.rust-bin.selectLatestNightlyWith (
-        toolchain:
-          toolchain.default.override {
-            extensions = [
-              "rust-src"
-              "rust-analyzer"
-              "cargo"
-              "llvm-tools-preview"
-            ];
-          }
-      );
+      naersk' = pkgs.callPackage naersk {};
 
     in {
-      toolchain = toolchain;
+      defaultPackage = naersk'.buildPackage {
+        src = ./.;
+      };
       devShell = pkgs.mkShell {
-        name = "OS";
-        buildInputs = [
-          toolchain
-          pkgs.cargo-bootimage
+        name = "Operating Systems";
+        nativeBuildInputs = with pkgs; [
+          rustc
+          cargo
+          rustfmt
+          lldb
         ];
-        # nativeBuildInputs = with pkgs; [
-        #   rustc
-        #   cargo
-        #   rustfmt
-        # ];
-        RUST_SRC_PATH = pkgs.rustPlatform.rustLibSrc;
+        RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
         packages = with pkgs; [
           just
-          qemu
+          (python312.withPackages (python312-pkgs: [
+            python312Packages.locust
+          ]))
         ];
       };
     });
