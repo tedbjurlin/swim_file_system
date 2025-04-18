@@ -7,5 +7,4 @@ edition = "2021"
 
 [dependencies]
 ramdisk = {git = "https://github.com/gjf2a/ramdisk"}
-anyhow = { version = "1.0", default-features = false }
 thiserror-no-std = "2.0.2"
