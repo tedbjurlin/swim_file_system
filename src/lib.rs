@@ -1,4 +1,4 @@
-//#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_std)]
 use thiserror_no_std::Error;
 
 use core::cmp::{max, min};
@@ -536,7 +536,7 @@ impl<
                 Err(FileSystemError::NotOpenForRead)
             } else {
                 let bytes_left_to_read = fileinfo.inode.bytes_stored as usize - (fileinfo.offset + (fileinfo.current_block * BLOCK_SIZE));
-                println!("{}", bytes_left_to_read);
+
                 let num_bytes = min(bytes_left_to_read, buffer.len());
                 self.disk.read(fileinfo.inode.blocks[fileinfo.current_block] as usize, &mut fileinfo.block_buffer).unwrap();
                 for i in 0..num_bytes {
@@ -721,11 +721,8 @@ impl<const MAX_BLOCKS: usize, const BLOCK_SIZE: usize> Inode<MAX_BLOCKS, BLOCK_S
         // Set the low-order bits of `bytes_stored` at `offset`.
         // Set the high-order bits of `bytes_stored` at the next element.
         // Copy the blocks into the following elements of `table_buffer`.
-        println!("{}", self.bytes_stored);
         table_buffer[offset] = (self.bytes_stored & 0xFF) as u8;
         table_buffer[offset + 1] = (self.bytes_stored >> 8) as u8;
-        println!("{}", self.bytes_stored & 0xff);
-        println!("{}", self.bytes_stored >> 8);
         for i in 0..MAX_BLOCKS {
             table_buffer[offset + 2 + i] = self.blocks[i];
         }
