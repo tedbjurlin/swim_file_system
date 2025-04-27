@@ -1,4 +1,4 @@
-#![cfg_attr(not(test), no_std)]
+//#![cfg_attr(not(test), no_std)]
 use thiserror_no_std::Error;
 
 use core::cmp::{max, min};
@@ -449,6 +449,7 @@ impl<
             if inode_num >= MAX_FILES_STORED {
                 Err(FileSystemError::TooManyFiles(MAX_FILES_STORED))
             } else {
+                let a = self.first_data_block();
                 let data_block = self.request_data_block()?;
                 let inode = Inode::new(data_block);
                 self.create_directory_entry(filename, inode_num, &mut dir_inode)?;
@@ -537,7 +538,7 @@ impl<
                 Err(FileSystemError::NotOpenForRead)
             } else {
                 let bytes_left_to_read = fileinfo.inode.bytes_stored as usize - (fileinfo.offset + (fileinfo.current_block * BLOCK_SIZE));
-
+                println!("{}", bytes_left_to_read);
                 let num_bytes = min(bytes_left_to_read, buffer.len());
                 self.disk.read(fileinfo.inode.blocks[fileinfo.current_block] as usize, &mut fileinfo.block_buffer).unwrap();
                 for i in 0..num_bytes {
@@ -602,7 +603,7 @@ impl<
         inode_num: usize,
         mut inode: Inode<MAX_FILE_BLOCKS, BLOCK_SIZE>,
     ) -> Result<usize, FileSystemError> {
-        todo!("Overwrite an existing file.");
+        //todo!("Overwrite an existing file.");
         // Load the DATA_FULL_BLOCK into the block buffer.
         // Clear all of the currently-used blocks for this file in the DATA_FULL_BLOCK.
         // Write that block back to disk.
@@ -611,12 +612,21 @@ impl<
         // Create an entry for the file in the file table.
         // Return its file descriptor.
         self.disk.read(DATA_FULL_BLOCK, &mut self.block_buffer).unwrap();
-        for block in inode.blocks {
+        for block in &inode.blocks {
             self.block_buffer[(block / 8) as usize] &= !2_u8.pow((block % 8) as u32);
         }
-        self.disk.write(DATA_FULL_BLOCK, &mut self.block_buffer);
-
-        Ok(0)
+        self.disk.write(DATA_FULL_BLOCK, &mut self.block_buffer).unwrap();
+        inode.blocks[0] = self.request_data_block()?;
+        inode.bytes_stored = 0;
+        self.save_inode(inode_num, &inode);
+        if let Some(fd) = self.find_lowest_fd() {
+            let fileinfo = FileInfo::write(inode, inode_num);
+            self.open[fd] = Some(fileinfo);
+            self.open_inodes[inode_num] = true;
+            Ok(fd)
+        } else {
+            Err(FileSystemError::TooManyOpen(MAX_OPEN))
+        }
     }
 
     pub fn open_append(&mut self, filename: &str) -> Result<usize, FileSystemError> {
@@ -632,7 +642,7 @@ impl<
         let (inode_num, inode) = self.inode_for(filename)?;
         if let Some(fd) = self.find_lowest_fd() {
             let mut fileinfo = FileInfo::write_inside(inode, inode_num, inode.blocks_used() - 1, inode.bytes_stored as usize % BLOCK_SIZE);
-            self.disk.read(fileinfo.current_block, &mut fileinfo.block_buffer).unwrap();
+            self.disk.read(fileinfo.inode.blocks[fileinfo.current_block] as usize, &mut fileinfo.block_buffer).unwrap();
             self.open[fd] = Some(fileinfo);
             self.open_inodes[inode_num] = true;
             Ok(fd)
@@ -1147,8 +1157,10 @@ mod tests {
         let mut buffer = [0; 10];
         loop {
             let num_bytes = sys.read(fd, &mut buffer).unwrap();
+            println!("{:?}, {}", buffer, num_bytes);
             let s = core::str::from_utf8(&buffer[0..num_bytes]).unwrap();
             read.push_str(s);
+            println!("{}", read);
             if num_bytes < buffer.len() {
                 sys.close(fd).unwrap();
                 return read;
