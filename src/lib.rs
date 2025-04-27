@@ -1,4 +1,4 @@
-//#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_std)]
 use thiserror_no_std::Error;
 
 use core::cmp::{max, min};
@@ -538,7 +538,7 @@ impl<
                 Err(FileSystemError::NotOpenForRead)
             } else {
                 let bytes_left_to_read = fileinfo.inode.bytes_stored as usize - (fileinfo.offset + (fileinfo.current_block * BLOCK_SIZE));
-                println!("{}", bytes_left_to_read);
+                //println!("{}", bytes_left_to_read);
                 let num_bytes = min(bytes_left_to_read, buffer.len());
                 self.disk.read(fileinfo.inode.blocks[fileinfo.current_block] as usize, &mut fileinfo.block_buffer).unwrap();
                 for i in 0..num_bytes {
